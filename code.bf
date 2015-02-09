@@ -1,4 +1,10 @@
-ModelMatrixDimension := 64;
+global ModelMatrixDimension := 128;
+siteNum := 7;
+if(ModelMatrixDimension > 100) {
+	global sqrtValue := 100*100;
+} else {
+	global sqrtValue := ModelMatrixDimension*ModelMatrixDimension;
+}
 
 // -------------------- initialize two matrix -------------------------------
 
@@ -6,6 +12,7 @@ function PopulateModelMatrix (ModelMatrixName&, pi, mu) {
 	if (!ModelMatrixDimension)
         {
              ModelMatrixDimension = 64;
+			
         }
        
     ModelMatrixName = {ModelMatrixDimension,ModelMatrixDimension};
@@ -17,18 +24,18 @@ function PopulateModelMatrix (ModelMatrixName&, pi, mu) {
 		for (v = 0; v<ModelMatrixDimension; v=v+1) {
 			if(h < 100 && v < 100) {
 				if(h == v+1 || h == v-1) {
-					modelDefString*("ModelMatrixName["+h+"]["+v+"] := " + "(pi" + "+" + "mu)*t1" + ";\n");
+					modelDefString*("ModelMatrixName["+h+"]["+v+"] := " + "(pi" + "+" + "mu)*t1*sqrtValue" + ";\n");
 				} else {
 					if(h == v){
 						if(h == 0 || h == ModelMatrixDimension-1) {
 							// -(pi*(ModelMatrixDimension-1) + mu)
-							modelDefString*("ModelMatrixName["+h+"]["+v+"] := 0-(" + "pi" + "*(" + ModelMatrixDimension + "-" + 1 + ")+" + "mu" + ")*t1;\n");
+							modelDefString*("ModelMatrixName["+h+"]["+v+"] := 0-(" + "pi" + "*(" + ModelMatrixDimension + "-" + 1 + ")+" + "mu" + ")*t1*sqrtValue;\n");
 						} else {
 							// -(pi*(ModelMatrixDimension-1) + 2*mu)
-							modelDefString*("ModelMatrixName["+h+"]["+v+"] := 0-(" + "pi" + "*(" + ModelMatrixDimension + "-" + 1 + ")+2*" + "mu" + ")*t1;\n");
+							modelDefString*("ModelMatrixName["+h+"]["+v+"] := 0-(" + "pi" + "*(" + ModelMatrixDimension + "-" + 1 + ")+2*" + "mu" + ")*t1*sqrtValue;\n");
 						}
 					} else{
-						modelDefString*("ModelMatrixName["+h+"]["+v+"] :=" + "pi*t1" + ";\n");
+						modelDefString*("ModelMatrixName["+h+"]["+v+"] :=" + "pi*t1*sqrtValue" + ";\n");
 					}
 				}
 			} else {
@@ -173,6 +180,7 @@ fprintf(stdout, "Please input the phenotype file\n");
 DataSet myData2 = ReadDataFile (PROMPT_FOR_FILE);
 fprintf (stdout, "Loaded observations of ", myData2.species, " sequences", " from ",LAST_FILE_PATH,"\n");
 
+
 //DataSetFilter myFilter1 = CreateFilter (myData, 1);
 //DataSetFilter myFilter2 = CreateFilter (myData2, 2);
 
@@ -276,15 +284,15 @@ AC := AC__; AT := AT__; CG := CG__; CT := CT__; GT := GT__;
 // -------------------- define params -------------
 // parameters for Q matrix
 global mu  = 1;
-mu :< 10;
-global pi = 1;
+//mu :< 10;
+global pi = 0.1;
 pi := 0;
+//pi :< 1;
 // parameters for logistic regression
-global a = -0.5;
+global a = 0;
 ClearConstraints(a);
-a:>-10; a:<10;
-global b = ModelMatrixDimension;
-b:< 100;
+a:>-100; a:<100;
+global b = 1;
 
 //fprintf(stdout, "\n");
 
@@ -332,21 +340,47 @@ fprintf (stdout, "\nAFTER\n", newTree, "\n");
 /* --------- estimate paramaters for transition matrix and Logistic regression matrix -------*/
 
 UseModel(m1);
-DataSetFilter myFilter2 = CreateFilter (myData2,6);
+DataSetFilter myFilter2 = CreateFilter (myData2,siteNum);
 LikelihoodFunction lf2 = (myFilter2, newTree);
 Optimize (myRes, lf2);
 fprintf (stdout, lf2);
 
-summaryPath := "K:\\winter2015\\project\\simple_test_data\\summary"; 
-Export (export_string, lf2);
-fitPath=summaryPath+".fit";
-fprintf(fitPath,export_string);
 
 
-//fprintf (stdout, myRes);
+// Print out the LogL for comparison
+fprintf(stdout, "Standard logL to compare\n");
+HarvestFrequencies (observationDistribution, myFilter2, siteNum, siteNum, 1);
+LogL = 1;
+for(i=0;i<2;i=i+1) {
+	temp = observationDistribution[i]^(observationDistribution[i]*myData2.species);
+	LogL = LogL * temp;
+}
+LogL = Log(LogL);
+fprintf(stdout, "LogL to compare is : ", LogL, "\n");
+
+// output the summary file
+//summaryPath := "K:\\winter2015\\project\\simple_test_data\\summary"; 
+//Export (export_string, lf2);
+//fitPath=summaryPath+".fit";
+//fprintf(fitPath,export_string);
+
+
 fprintf (stdout, "\n\n[PHASE 2 finished]\n");
 
-//fprintf (stdout, givenTree.CY002120_1998_12_New_York_254.t, " ", givenTree.CY002120_1998_12_New_York_254_phenotype.mu, " ", newTree.CY002120_1998_12_New_York_254.t1, "\n");
-//fprintf (stdout, newTree.CY002120_1998_12_New_York_254.t1, "  ", newTree.CY002120_1998_12_New_York_254.mu, " ", newTree.CY002120_1998_12_New_York_254.pi,"\n");
-//fprintf (stdout, newTree.CY002120_1998_12_New_York_254_phenotype.t1, "  ", newTree.CY002120_1998_12_New_York_254_phenotype.a, " ", newTree.CY002120_1998_12_New_York_254_phenotype.b,"\n");
-//fprintf (stdout, newTree.Node32.t1, "  ", newTree.Node32.mu, " ", newTree.Node32.pi,"\n");
+
+fprintf(stdout, "First column of Logistic regression matrix\n");
+for(i=0;i<ModelMatrixDimension;i=i+1) {
+	fprintf(stdout, LGProb[i][0], "\n");
+}
+
+
+//fprintf(stdout, "\n");
+//fprintf(stdout, "The t for all the leaf branches\n");
+//tips = BranchCount(newTree);
+//loc = 0;
+//for (i=0; i<tips; i=i+1)
+//{
+//	tempTipName = BranchName(newTree,i);
+//	fprintf(stdout, *("newTree."+tempTipName+".t1"), "\n");
+//}
+//fprintf(stdout, "\n");
